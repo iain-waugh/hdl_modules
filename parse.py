@@ -1,6 +1,7 @@
 from __future__ import print_function, division
 from pathlib import Path
 from tree_sitter import Language, Parser
+# import hdl
 
 Language.build_library(
     # Store the library in the `build` directory
@@ -12,31 +13,80 @@ VHDL_LANGUAGE = Language("build/my-languages.so", "vhdl")
 VERILOG_LANGUAGE = Language("build/my-languages.so", "verilog")
 TCL_LANGUAGE = Language("build/my-languages.so", "tcl")
 
+class HDLParser(object):
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.language = self.hdl_format()
+        return
 
-def parse(file_path):
-    # Create a parser
-    parser = Parser()
-    parser.set_language(VHDL_LANGUAGE)
+    def hdl_format(self):
+        if self.file_path.suffix.lower() in [".vhd", ".vhdl"]:
+            language = "vhdl"
+        elif self.file_path.suffix.lower() == ".v":
+            language = "verilog"
+        elif self.file_path.suffix.lower() == ".sv":
+            language = "sv"
+        else:
+            raise ValueError("Unknown file type: " + self.file_path.suffix.lower())
+        return language
 
-    # Open and read a file
-    with open(file_path, "r") as file:
-        code = file.read()
+    def parse(self):
+        # Create a parser
+        parser = Parser()
+        if self.language == "vhdl":
+            parser.set_language(VHDL_LANGUAGE)
+        elif self.language in ["verilog", "sv"]:
+            parser.set_language(VERILOG_LANGUAGE)
 
-    # Parse the code
-    tree = parser.parse(bytes(code, "utf-8"))
+        # Open and read a file
+        with open(self.file_path, "rb") as file:
+            code = file.read()
+    
+        # Parse the code
+        self.tree = parser.parse(bytes(code.decode("utf-8"), "utf-8"))
+        return self.tree
 
-    return tree
+    def get_modules(self):
+        # Choose the right query for VHDl, Verilog or System Verilog
+        if self.language == "vhdl":
+            query = VHDL_LANGUAGE.query("""
+            (entity_declaration (identifier)) @param_expression
+            """)
+        elif self.language in ["verilog", "sv"]:
+            query = VERILOG_LANGUAGE.query("""
+            (module_header (module_keyword) (simple_identifier) ) @param_expression
+            """)
+        captures = query.captures(self.tree.root_node)
+        
+        # Make a list of the module names
+        module_names = []
+        for capture in captures:
+            print_tree(capture[0], print_all_children=True)
+            module_names.append(capture[0].children[1].text.decode("utf-8"))
+
+        return module_names
+
+    def get_package(self):
+        return
+        
+    def get_rtl(self):
+        return
 
 
 # Print the abstract syntax tree
 def print_tree(node, depth=0, print_all_children=False):
-    printable_names = ["simple_name", "identifier", "character_literal"]
+    printable_names = [
+        "simple_name",
+        "identifier",
+        "simple_identifier", 
+        "character_literal"
+        ]
     if depth > 0:
         indent = "  " * depth
     else:
         indent = ""
     if node.child_count == 0:
-        if node.type in printable_names or print_all_children:
+        if (node.type in printable_names) or print_all_children:
             name = node.text.decode("utf-8")
             print(f"{indent}{node.type} ({name})")
         else:
@@ -67,14 +117,15 @@ def cli_parser():
         "-i",
         "--input",
         type=str,
-        default="hdl/hello_world.vhd",
+        default="hdl/hello_world.v",
         help="name of the file to be parsed",
     )
     cli.add_argument(
         "-v",
         "--verbose",
-        type=str2bool,
+        type=bool,
         default=False,
+        action=argparse.BooleanOptionalAction,
         help="show verbose messages",
     )
     cli.add_argument(
@@ -89,8 +140,12 @@ def cli_parser():
 
 if __name__ == "__main__":
     cli_args = cli_parser()
-    file_in: str = cli_args.pop("input")
-    file_out: str = cli_args.pop("output")
+    file_in = Path(cli_args.pop("input"))
+    file_out = Path(cli_args.pop("output"))
 
-    tree = parse(file_in)
-    print_tree(tree.root_node)
+    hdl_file = HDLParser(file_in)
+    hdl_file.parse()
+    if cli_args.pop("verbose"):
+        print_tree(hdl_file.tree.root_node, print_all_children=True)
+    modules = hdl_file.get_modules()
+    print(modules)
