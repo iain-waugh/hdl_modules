@@ -61,7 +61,7 @@ class HDLParser(object):
         # Make a list of the module names
         module_names = []
         for capture in captures:
-            print_tree(capture[0], print_all_children=True)
+            #print_tree(capture[0], print_all_children=True)
             module_names.append(capture[0].children[1].text.decode("utf-8"))
 
         return module_names
@@ -117,8 +117,8 @@ def cli_parser():
         "-i",
         "--input",
         type=str,
-        default="hdl/hello_world.v",
-        help="name of the file to be parsed",
+        default=".",
+        help="name of the file or folder to be parsed",
     )
     cli.add_argument(
         "-v",
@@ -137,15 +137,36 @@ def cli_parser():
     )
     return cli.parse_args().__dict__
 
+def get_files_with_suffix(path, suffixes=[".vhd", ".vhdl", ".v", ".sv"]):
+    matching_files = []
+    path = Path(path)
+
+    if path.is_file() and path.suffix in suffixes:
+        matching_files.append(path)
+
+    if not path.exists():
+        print("The specified path does not exist.")
+        return matching_files
+    
+    if path.is_dir():
+        for file in path.glob('**/*'):
+            if file.is_file() and file.suffix in suffixes:
+                matching_files.append(file)
+    
+    return matching_files
 
 if __name__ == "__main__":
     cli_args = cli_parser()
-    file_in = Path(cli_args.pop("input"))
+    path_in = Path(cli_args.pop("input"))
     file_out = Path(cli_args.pop("output"))
+    verbose = cli_args.pop("verbose")
+    file_list = get_files_with_suffix(path_in)
 
-    hdl_file = HDLParser(file_in)
-    hdl_file.parse()
-    if cli_args.pop("verbose"):
-        print_tree(hdl_file.tree.root_node, print_all_children=True)
-    modules = hdl_file.get_modules()
-    print(modules)
+    print("Files and their submodule definitions:")
+    for file_name in file_list:
+        hdl_file = HDLParser(file_name)
+        hdl_file.parse()
+        if verbose:
+            print_tree(hdl_file.tree.root_node, print_all_children=True)
+        modules = hdl_file.get_modules()
+        print(file_name, modules)
