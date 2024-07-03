@@ -47,7 +47,7 @@ class HDLParser(object):
         return self.tree
 
     def get_modules(self):
-        # Choose the right query for VHDl, Verilog or System Verilog
+        # Choose the right query for VHDL, Verilog or System Verilog
         if self.language == "vhdl":
             query = VHDL_LANGUAGE.query("""
             (entity_declaration (identifier)) @param_expression
@@ -125,7 +125,7 @@ def cli_parser():
         "--verbose",
         type=bool,
         default=False,
-        action=argparse.BooleanOptionalAction,
+#        action=argparse.BooleanOptionalAction,
         help="show verbose messages",
     )
     cli.add_argument(
